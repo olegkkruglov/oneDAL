@@ -53,7 +53,7 @@ sycl::event gemm(sycl::queue& queue,
                                beta,
                                c.get_mutable_data(),
                                c.get_leading_stride(),
-                               mkl::blas::compute_mode::float_to_bf16,
+                               mkl::blas::compute_mode::float_to_bf16x2,
                                deps);
     }
     else {
@@ -71,7 +71,7 @@ sycl::event gemm(sycl::queue& queue,
                                beta,
                                c.get_mutable_data(),
                                c.get_leading_stride(),
-                               mkl::blas::compute_mode::float_to_bf16,
+                               mkl::blas::compute_mode::float_to_bf16x2,
                                deps);
     }
 }

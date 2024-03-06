@@ -72,6 +72,9 @@ using enable_if_result_option_id_t = std::enable_if_t<is_result_option_id_v<Resu
 template <typename ResultOptionIdType, typename = enable_if_result_option_id_t<ResultOptionIdType>>
 constexpr inline ResultOptionIdType operator|(const ResultOptionIdType& lhs,
                                               const ResultOptionIdType& rhs) {
+    std::cout << "lhs.get_mask() = " << lhs.get_mask() << ", rhs.get_mask() = " << rhs.get_mask() << std::endl;
+    auto result_ = result_option_id_base{ lhs.get_mask() | rhs.get_mask() };
+    std::cout << "result_option_id_base mask = " << result_.get_mask() << ", ResultOptionIdType mask = " << ResultOptionIdType{result_}.get_mask() << std::endl;
     return ResultOptionIdType{ result_option_id_base{ lhs.get_mask() | rhs.get_mask() } };
 }
 

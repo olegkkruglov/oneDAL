@@ -44,9 +44,10 @@ public:
         return get_mask() & flag.get_mask();
     }
 
-    constexpr static this_t make_by_index(std::int64_t result_index) {
-        std::cout << "this_t{ bitset_t(1) << result_index } = " << this_t{ bitset_t(1) << result_index } << std::endl;
-        return this_t{ bitset_t(1) << result_index };
+    static this_t make_by_index(std::int64_t result_index) {
+        auto result = this_t{ bitset_t(1) << result_index };
+        std::cout << "result mask = " << result.get_mask() << std::endl;
+        return result;
     }
 
 private:

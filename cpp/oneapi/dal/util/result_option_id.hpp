@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cstdint>
+#include <iostream>
 
 #include "oneapi/dal/detail/serialization.hpp"
 
@@ -44,6 +45,7 @@ public:
     }
 
     constexpr static this_t make_by_index(std::int64_t result_index) {
+        std::cout << "this_t{ bitset_t(1) << result_index } = " << this_t{ bitset_t(1) << result_index } << std::endl;
         return this_t{ bitset_t(1) << result_index };
     }
 

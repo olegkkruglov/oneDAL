@@ -17,6 +17,7 @@
 #include "oneapi/dal/detail/profiler.hpp"
 #include "oneapi/dal/backend/primitives/blas/gemm.hpp"
 #include "oneapi/dal/backend/primitives/blas/misc.hpp"
+#include <iostream>
 
 #include <mkl_dal_sycl.hpp>
 
@@ -38,6 +39,8 @@ sycl::event gemm(sycl::queue& queue,
     ONEDAL_ASSERT(c.has_mutable_data());
 
     constexpr bool is_c_trans = (co == ndorder::c);
+    std::cout << "before gemm" << std::endl;
+
     if constexpr (is_c_trans) {
         return mkl::blas::gemm(queue,
                                f_order_as_transposed(bo),
@@ -54,6 +57,7 @@ sycl::event gemm(sycl::queue& queue,
                                c.get_mutable_data(),
                                c.get_leading_stride(),
                                deps);
+        
     }
     else {
         return mkl::blas::gemm(queue,

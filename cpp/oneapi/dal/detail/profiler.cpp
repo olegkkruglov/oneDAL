@@ -26,7 +26,7 @@ profiler::profiler() {
 profiler::~profiler() {
     auto end_time = get_time();
     auto total_time = end_time - start_time;
-    std::cout << "total time: " << total_time << std::endl;
+    std::cout << "KERNEL_PROFILER: total time " << total_time / 1e6 << std::endl;
 }
 
 std::uint64_t profiler::get_time() {
@@ -75,7 +75,7 @@ void profiler::end_task(const char* task_name) {
     else {
         it->second += times;
     }
-    std::cout << std::string(task_name) << " " << times / 1e6 << std::endl;
+    std::cout << "KERNEL_PROFILER: " << std::string(task_name) << " " << times / 1e6 << std::endl;
 }
 
 #ifdef ONEDAL_DATA_PARALLEL

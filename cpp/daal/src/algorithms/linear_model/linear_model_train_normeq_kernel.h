@@ -122,7 +122,7 @@ public:
      *                          are passed into lapack routines
      * \return Status of the computations
      */
-    static Status solveSystem(DAAL_INT p, algorithmFPType * a, DAAL_INT ny, algorithmFPType * b, const ErrorID & internalError);
+    static Statu(DAAL_INT p, algorithmFPType * a, DAAL_INT ny, algorithmFPType * b, const ErrorID & internalError);
 };
 
 /**

@@ -87,7 +87,7 @@ public:
     void set_queue(const sycl::queue& q);
     
 
-    static profiler_task start_task(const char* task_name, const sycl::queue& task_queue);
+    static profiler_task start_task(const char* task_name, sycl::queue& task_queue);
 #endif
     static void end_task(const char* task_name);
 

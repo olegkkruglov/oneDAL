@@ -65,6 +65,10 @@ profiler_task profiler::start_task(const char* task_name) {
 void profiler::end_task(const char* task_name) {
     const std::uint64_t ns_end = get_time();
     auto& tasks_info = get_instance()->get_task();
+#ifdef ONEDAL_DATA_PARALLEL
+    auto& queue = get_instance()->get_queue();
+    queue.wait_and_throw();
+#endif
     tasks_info.current_kernel--;
     const std::uint64_t times = ns_end - tasks_info.time_kernels[tasks_info.current_kernel];
 
@@ -79,7 +83,9 @@ void profiler::end_task(const char* task_name) {
 }
 
 #ifdef ONEDAL_DATA_PARALLEL
-profiler_task profiler::start_task(const char* task_name, const sycl::queue& task_queue) {
+profiler_task profiler::start_task(const char* task_name, sycl::queue& task_queue) {
+    task_queue.wait_and_throw();
+    get_instance()->set_queue(task_queue);
     auto ns_start = get_time();
     auto& tasks_info = get_instance()->get_task();
     tasks_info.time_kernels[tasks_info.current_kernel] = ns_start;
@@ -92,9 +98,8 @@ profiler_task profiler::start_task(const char* task_name, const sycl::queue& tas
 profiler_task::profiler_task(const char* task_name, const sycl::queue& task_queue)
         : task_name_(task_name),
           task_queue_(task_queue),
-          has_queue_(true) {
-            task_queue_.wait_and_throw();
-          }
+          has_queue_(true) {}
+          
 #endif
 
 profiler_task::profiler_task(const char* task_name) 

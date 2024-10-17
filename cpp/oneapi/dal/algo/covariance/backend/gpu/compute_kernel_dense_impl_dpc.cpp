@@ -48,6 +48,7 @@ template <typename Float>
 result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
                                                       const parameters_t& params,
                                                       const input_t& input) {
+    ONEDAL_PROFILER_TASK(compute_covariance_kernel_dense);                                                    
     ONEDAL_ASSERT(input.get_data().has_data());
 
     const auto data = input.get_data();
@@ -62,8 +63,10 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
     auto assume_centered = desc.get_assume_centered();
 
     auto result = compute_result<task_t>{}.set_result_options(desc.get_result_options());
-
-    const auto data_nd = pr::table2ndarray<Float>(q_, data, alloc::device);
+    {
+        ONEDAL_PROFILER_TASK(table2ndarray_, q_);
+        const auto data_nd = pr::table2ndarray<Float>(q_, data, alloc::device);
+    }
 
     auto [sums, sums_event] = compute_sums(q_, data_nd, assume_centered, {});
 
@@ -98,26 +101,38 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
                                                    bias,
                                                    assume_centered,
                                                    { gemm_event });
-        result.set_cov_matrix(
-            (homogen_table::wrap(cov.flatten(q_, { cov_event }), column_count, column_count)));
+        {
+            ONEDAL_PROFILER_TASK(cov_flatten, q_)
+            result.set_cov_matrix(
+                (homogen_table::wrap(cov.flatten(q_, { cov_event }), column_count, column_count)));
+        }
     }
     if (desc.get_result_options().test(result_options::cor_matrix)) {
         auto [corr, corr_event] =
             compute_correlation(q_, rows_count_global, xtx, sums, { gemm_event });
-        result.set_cor_matrix(
-            (homogen_table::wrap(corr.flatten(q_, { corr_event }), column_count, column_count)));
+        {
+            ONEDAL_PROFILER_TASK(corr_flatten, q_)
+            result.set_cor_matrix(
+                (homogen_table::wrap(corr.flatten(q_, { corr_event }), column_count, column_count)));
+        }
     }
     if (desc.get_result_options().test(result_options::means)) {
         if (!assume_centered) {
             auto [means, means_event] = compute_means(q_, sums, rows_count_global, { gemm_event });
-            result.set_means(
-                homogen_table::wrap(means.flatten(q_, { means_event }), 1, column_count));
+            {
+                ONEDAL_PROFILER_TASK(means_flatten, q_)
+                result.set_means(
+                    homogen_table::wrap(means.flatten(q_, { means_event }), 1, column_count));
+            }
         }
         else {
             auto [zero_means, zeros_event] =
                 pr::ndarray<Float, 1>::zeros(q_, { column_count }, sycl::usm::alloc::device);
-            result.set_means(
-                homogen_table::wrap(zero_means.flatten(q_, { zeros_event }), 1, column_count));
+            {
+                ONEDAL_PROFILER_TASK(zero_means_flatten, q_)
+                result.set_means(
+                    homogen_table::wrap(zero_means.flatten(q_, { zeros_event }), 1, column_count));
+            }
         }
     }
     return result;

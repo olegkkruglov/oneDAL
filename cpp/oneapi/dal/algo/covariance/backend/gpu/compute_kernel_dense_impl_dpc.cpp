@@ -63,10 +63,7 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
     auto assume_centered = desc.get_assume_centered();
 
     auto result = compute_result<task_t>{}.set_result_options(desc.get_result_options());
-    {
-        ONEDAL_PROFILER_TASK(table2ndarray_, q_);
-        const auto data_nd = pr::table2ndarray<Float>(q_, data, alloc::device);
-    }
+    const auto data_nd = pr::table2ndarray<Float>(q_, data, alloc::device);
 
     auto [sums, sums_event] = compute_sums(q_, data_nd, assume_centered, {});
 
@@ -102,7 +99,7 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
                                                    assume_centered,
                                                    { gemm_event });
         {
-            ONEDAL_PROFILER_TASK(cov_flatten, q_)
+            ONEDAL_PROFILER_TASK(cov_flatten, q_);
             result.set_cov_matrix(
                 (homogen_table::wrap(cov.flatten(q_, { cov_event }), column_count, column_count)));
         }
@@ -111,7 +108,7 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
         auto [corr, corr_event] =
             compute_correlation(q_, rows_count_global, xtx, sums, { gemm_event });
         {
-            ONEDAL_PROFILER_TASK(corr_flatten, q_)
+            ONEDAL_PROFILER_TASK(corr_flatten, q_);
             result.set_cor_matrix(
                 (homogen_table::wrap(corr.flatten(q_, { corr_event }), column_count, column_count)));
         }
@@ -120,7 +117,7 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
         if (!assume_centered) {
             auto [means, means_event] = compute_means(q_, sums, rows_count_global, { gemm_event });
             {
-                ONEDAL_PROFILER_TASK(means_flatten, q_)
+                ONEDAL_PROFILER_TASK(means_flatten, q_);
                 result.set_means(
                     homogen_table::wrap(means.flatten(q_, { means_event }), 1, column_count));
             }
@@ -129,7 +126,7 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
             auto [zero_means, zeros_event] =
                 pr::ndarray<Float, 1>::zeros(q_, { column_count }, sycl::usm::alloc::device);
             {
-                ONEDAL_PROFILER_TASK(zero_means_flatten, q_)
+                ONEDAL_PROFILER_TASK(zero_means_flatten, q_);
                 result.set_means(
                     homogen_table::wrap(zero_means.flatten(q_, { zeros_event }), 1, column_count));
             }

@@ -65,6 +65,11 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
     auto result = compute_result<task_t>{}.set_result_options(desc.get_result_options());
     const auto data_nd = pr::table2ndarray<Float>(q_, data, alloc::device);
 
+    {
+        ONEDAL_PROFILER_TASK(allreduce_rows_count_global);
+        comm_.allreduce(rows_count_global, spmd::reduce_op::sum).wait();
+    }
+
     auto [sums, sums_event] = compute_sums(q_, data_nd, assume_centered, {});
 
     {
@@ -85,10 +90,6 @@ result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
         comm_.allreduce(xtx.flatten(q_, { gemm_event }), spmd::reduce_op::sum).wait();
     }
 
-    {
-        ONEDAL_PROFILER_TASK(allreduce_rows_count_global);
-        comm_.allreduce(rows_count_global, spmd::reduce_op::sum).wait();
-    }
 
     if (desc.get_result_options().test(result_options::cov_matrix)) {
         auto [cov, cov_event] = compute_covariance(q_,

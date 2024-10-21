@@ -27,6 +27,13 @@
 #include "oneapi/dal/backend/primitives/reduction.hpp"
 #include "oneapi/dal/backend/primitives/stat.hpp"
 #include "oneapi/dal/backend/primitives/blas.hpp"
+#include <iostream>
+#include "oneapi/dal/backend/common.hpp"
+#include "oneapi/dal/detail/cpu_info_impl.hpp"
+#include "oneapi/dal/detail/error_messages.hpp"
+#include "oneapi/dal/detail/parameters/system_parameters_impl.hpp"
+#include <daal/src/services/service_defines.h>
+#include <daal/include/services/internal/daal_kernel_defines.h>
 
 #ifdef ONEDAL_DATA_PARALLEL
 
@@ -48,6 +55,9 @@ template <typename Float>
 result_t compute_kernel_dense_impl<Float>::operator()(const descriptor_t& desc,
                                                       const parameters_t& params,
                                                       const input_t& input) {
+    using daal::services::Environment;
+    Environment* env = Environment::getInstance();
+    std::cerr << "number of threads = " << static_cast<std::uint32_t>(env->getNumberOfThreads()) << std::endl;
     ONEDAL_PROFILER_TASK(compute_covariance_kernel_dense);                                                    
     ONEDAL_ASSERT(input.get_data().has_data());
 

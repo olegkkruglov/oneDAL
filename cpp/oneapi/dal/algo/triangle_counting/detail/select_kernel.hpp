@@ -21,6 +21,11 @@
 #include "oneapi/dal/algo/triangle_counting/vertex_ranking_types.hpp"
 #include "oneapi/dal/graph/detail/undirected_adjacency_vector_graph_impl.hpp"
 
+#ifdef ONEDAL_DATA_PARALLEL
+#include "oneapi/dal/algo/triangle_counting/backend/gpu/triangle_counting.hpp"
+#include "oneapi/dal/backend/dispatcher.hpp"
+#endif
+
 namespace oneapi::dal::preview::triangle_counting::detail {
 
 template <typename Policy, typename Descriptor, typename Topology>
@@ -56,6 +61,41 @@ struct backend_default : public backend_base<Policy, Descriptor, Topology> {
             t);
     }
 };
+
+#ifdef ONEDAL_DATA_PARALLEL
+template <typename Descriptor, typename Topology>
+struct backend_default<dal::detail::data_parallel_policy, Descriptor, Topology>
+        : public backend_base<dal::detail::data_parallel_policy, Descriptor, Topology> {
+    using float_t = typename Descriptor::float_t;
+    using task_t = typename Descriptor::task_t;
+    using method_t = typename Descriptor::method_t;
+    using allocator_t = typename Descriptor::allocator_t;
+
+    virtual vertex_ranking_result<task_t> operator()(
+        const dal::detail::data_parallel_policy& ctx,
+        const Descriptor& descriptor,
+        const Topology& t) {
+        return dal::backend::dispatch_by_device(
+            ctx,
+            [&]() {
+                // CPU path: delegate to host policy kernel
+                return vertex_ranking_kernel_cpu<method_t, task_t, allocator_t, Topology>()(
+                    dal::detail::host_policy::get_default(),
+                    descriptor,
+                    descriptor.get_allocator(),
+                    t);
+            },
+            [&]() {
+                // GPU path: delegate to GPU kernel
+                dal::backend::context_gpu gpu_ctx{ ctx };
+                return backend::vertex_ranking_kernel_gpu<float_t, task_t, Topology>()(
+                    gpu_ctx,
+                    descriptor,
+                    t);
+            });
+    }
+};
+#endif
 
 template <typename Policy, typename Descriptor, typename Topology>
 dal::detail::shared<backend_base<Policy, Descriptor, Topology>> get_backend(const Descriptor& desc,

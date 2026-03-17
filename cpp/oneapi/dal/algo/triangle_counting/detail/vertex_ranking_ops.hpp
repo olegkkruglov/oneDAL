@@ -36,7 +36,7 @@ struct vertex_ranking_ops_dispatcher {
 
         const auto &t = topology_builder(input.get_graph());
 
-        static auto impl = get_backend<Policy, Descriptor>(descriptor, t);
+        auto impl = get_backend<Policy, Descriptor>(descriptor, t);
 
         return (*impl)(policy, descriptor, t);
     }

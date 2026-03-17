@@ -21,7 +21,6 @@
 #include <sycl/sycl.hpp>
 
 #include "oneapi/dal/array.hpp"
-#include "oneapi/dal/backend/transfer.hpp"
 #include "oneapi/dal/graph/detail/csr_topology.hpp"
 
 namespace oneapi::dal::preview::detail {
@@ -103,13 +102,24 @@ device_csr_topology<IndexType> topology_to_device(sycl::queue& queue,
     }
 
     const std::int64_t rows_count = vertex_count + 1;
+    const std::int64_t cols_count = host_topo._cols.get_count();
 
-    // Transfer column indices (IndexType -> IndexType) directly to device
-    auto device_cols = dal::backend::to_device_sync(queue, host_topo._cols);
+    // Transfer column indices (IndexType -> IndexType) to device
+    auto device_cols =
+        dal::array<IndexType>::empty(queue, cols_count, sycl::usm::alloc::device);
+    queue.memcpy(device_cols.get_mutable_data(),
+                 host_topo._cols.get_data(),
+                 cols_count * sizeof(IndexType))
+        .wait_and_throw();
 
     // Row offsets are stored as int64 in host topology but we need IndexType
     // on device. Copy int64 to device, then convert with a parallel kernel.
-    auto device_rows_i64 = dal::backend::to_device_sync(queue, host_topo._rows);
+    auto device_rows_i64 =
+        dal::array<std::int64_t>::empty(queue, rows_count, sycl::usm::alloc::device);
+    queue.memcpy(device_rows_i64.get_mutable_data(),
+                 host_topo._rows.get_data(),
+                 rows_count * sizeof(std::int64_t))
+        .wait_and_throw();
 
     auto device_rows = dal::array<IndexType>::empty(queue, rows_count, sycl::usm::alloc::device);
     queue
@@ -144,8 +154,22 @@ topology<IndexType> topology_to_host(const device_csr_topology<IndexType>& devic
     }
 
     // Transfer device arrays back to host
-    auto host_cols = dal::backend::to_host_sync(device_topo.get_cols_array());
-    auto host_rows_i32 = dal::backend::to_host_sync(device_topo.get_rows_array());
+    const std::int64_t cols_count = device_topo.get_cols_array().get_count();
+    const std::int64_t i32_rows_count = device_topo.get_rows_array().get_count();
+
+    auto host_cols = dal::array<IndexType>::empty(cols_count);
+    auto host_rows_i32 = dal::array<IndexType>::empty(i32_rows_count);
+
+    // Retrieve the queue from the device arrays
+    auto q = device_topo.get_cols_array().get_queue().value();
+    q.memcpy(host_cols.get_mutable_data(),
+             device_topo.get_cols(),
+             cols_count * sizeof(IndexType))
+        .wait_and_throw();
+    q.memcpy(host_rows_i32.get_mutable_data(),
+             device_topo.get_rows(),
+             i32_rows_count * sizeof(IndexType))
+        .wait_and_throw();
 
     // Convert IndexType row offsets back to int64 for the host topology
     const std::int64_t rows_count = vertex_count + 1;

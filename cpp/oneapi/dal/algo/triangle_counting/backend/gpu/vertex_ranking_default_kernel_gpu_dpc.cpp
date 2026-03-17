@@ -19,7 +19,6 @@
 #include "oneapi/dal/algo/triangle_counting/backend/gpu/triangle_counting.hpp"
 #include "oneapi/dal/algo/triangle_counting/backend/gpu/vertex_ranking_kernel.hpp"
 #include "oneapi/dal/backend/dispatcher.hpp"
-#include "oneapi/dal/graph/detail/csr_topology.hpp"
 #include "oneapi/dal/table/detail/table_builder.hpp"
 
 namespace oneapi::dal::preview::triangle_counting::backend {
@@ -203,50 +202,20 @@ vertex_ranking_result<Task> vertex_ranking_kernel_gpu<Float, Task, Topology>::op
     const Topology& topology) const {
     auto& queue = ctx.get_queue();
     const auto vertex_count = topology.get_vertex_count();
-    const auto edge_count = topology.get_edge_count();
 
     if (vertex_count == 0) {
         return vertex_ranking_result<Task>();
     }
 
-    // Build CSR arrays on device from the host topology
-    const auto* host_rows = topology._rows.get_data();
-    const auto* host_cols = topology._cols.get_data();
-    const std::int64_t rows_count = vertex_count + 1;
-    const std::int64_t cols_count = edge_count * 2;
+    // Transfer the host topology to device memory using the graph transfer utility.
+    // This copies row offsets (int64 -> int32 conversion) and column indices to device.
+    auto device_topo =
+        dal::preview::detail::topology_to_device<std::int32_t>(queue, topology);
 
-    // Copy int64_t row offsets to device, then convert to int32_t
-    auto* device_rows_i64 = sycl::malloc_device<std::int64_t>(rows_count, queue);
-    queue.memcpy(device_rows_i64, host_rows, rows_count * sizeof(std::int64_t)).wait_and_throw();
+    // Create a lightweight GPU view from the device topology (zero-copy)
+    const auto gpu_view = make_gpu_view(device_topo);
 
-    auto* device_rows_i32 = sycl::malloc_device<std::int32_t>(rows_count, queue);
-    queue.submit([&](sycl::handler& cgh) {
-        const auto* src = device_rows_i64;
-        auto* dst = device_rows_i32;
-        const auto n = rows_count;
-        cgh.parallel_for(sycl::range<1>(n), [=](sycl::id<1> idx) {
-            dst[idx[0]] = static_cast<std::int32_t>(src[idx[0]]);
-        });
-    }).wait_and_throw();
-    sycl::free(device_rows_i64, queue);
-
-    // Copy int32_t column indices to device
-    auto* device_cols = sycl::malloc_device<std::int32_t>(cols_count, queue);
-    queue.memcpy(device_cols, host_cols, cols_count * sizeof(std::int32_t)).wait_and_throw();
-
-    // Create a CSR view for GPU kernel
-    csr_topology_gpu_view<std::int32_t> gpu_view;
-    gpu_view.rows = device_rows_i32;
-    gpu_view.cols = device_cols;
-    gpu_view.vertex_count = vertex_count;
-    gpu_view.edge_count = edge_count;
-
-    auto result = run_vertex_ranking_gpu<Float, Task, std::int32_t>(ctx, desc, gpu_view);
-
-    sycl::free(device_rows_i32, queue);
-    sycl::free(device_cols, queue);
-
-    return result;
+    return run_vertex_ranking_gpu<Float, Task, std::int32_t>(ctx, desc, gpu_view);
 }
 
 // Explicit template instantiations

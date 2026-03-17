@@ -23,6 +23,7 @@
 #include <sycl/sycl.hpp>
 
 #include "oneapi/dal/algo/triangle_counting/vertex_ranking.hpp"
+#include "oneapi/dal/graph/detail/device_csr_topology.hpp"
 
 #include "oneapi/dal/test/engine/common.hpp"
 
@@ -370,6 +371,56 @@ TEST_M(triangle_counting_gpu_test, "GPU: Null graph - local_and_global task") {
         static_cast<const dal::homogen_table&>(result.get_ranks());
     REQUIRE(local_triangles.has_data() == false);
     REQUIRE(result.get_global_rank() == 0);
+}
+
+TEST_M(triangle_counting_gpu_test, "GPU: topology_to_device round-trip") {
+    const auto g = create_graph<complete_graph_5_type>();
+    auto q = get_queue();
+
+    // Access the internal topology
+    const auto& topo = oneapi::dal::detail::get_impl(g).get_topology();
+
+    // Transfer topology to device
+    auto device_topo =
+        dal::preview::detail::topology_to_device<std::int32_t>(q, topo);
+
+    REQUIRE(device_topo.get_vertex_count() == 5);
+    REQUIRE(device_topo.get_edge_count() == 10);
+    REQUIRE(device_topo.get_rows() != nullptr);
+    REQUIRE(device_topo.get_cols() != nullptr);
+
+    // Transfer back to host and verify
+    auto host_topo = dal::preview::detail::topology_to_host(device_topo);
+
+    REQUIRE(host_topo.get_vertex_count() == 5);
+    REQUIRE(host_topo.get_edge_count() == 10);
+
+    // Verify row offsets match original
+    for (std::int64_t i = 0; i <= 5; ++i) {
+        REQUIRE(host_topo._rows[i] == topo._rows[i]);
+    }
+
+    // Verify column indices match original
+    for (std::int64_t i = 0; i < 20; ++i) {
+        REQUIRE(host_topo._cols[i] == topo._cols[i]);
+    }
+}
+
+TEST_M(triangle_counting_gpu_test, "GPU: Empty topology round-trip") {
+    auto q = get_queue();
+
+    dal::preview::detail::topology<std::int32_t> empty_topo;
+
+    auto device_topo =
+        dal::preview::detail::topology_to_device<std::int32_t>(q, empty_topo);
+
+    REQUIRE(device_topo.get_vertex_count() == 0);
+    REQUIRE(device_topo.get_edge_count() == 0);
+
+    auto host_topo = dal::preview::detail::topology_to_host(device_topo);
+
+    REQUIRE(host_topo.get_vertex_count() == 0);
+    REQUIRE(host_topo.get_edge_count() == 0);
 }
 
 } // namespace oneapi::dal::algo::triangle_counting::gpu::test

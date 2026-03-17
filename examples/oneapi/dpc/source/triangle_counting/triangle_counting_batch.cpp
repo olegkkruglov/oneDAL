@@ -25,6 +25,7 @@
 
 #include "oneapi/dal/algo/triangle_counting.hpp"
 #include "oneapi/dal/graph/undirected_adjacency_vector_graph.hpp"
+#include "oneapi/dal/graph/detail/device_csr_topology.hpp"
 #include "oneapi/dal/io/csv.hpp"
 
 #include "example_util/utils.hpp"
@@ -35,14 +36,25 @@ using namespace dal::preview::triangle_counting;
 void run(sycl::queue& q) {
     const auto filename = get_data_path("graph.csv");
 
-    // Read the graph from CSV
+    // Read the graph from CSV into host memory
     using graph_t = dal::preview::undirected_adjacency_vector_graph<>;
     const auto graph = dal::read<graph_t>(dal::csv::data_source{ filename });
+
+    // Explicitly transfer the graph topology from host to device.
+    // This copies CSR row offsets and column indices to device USM memory.
+    const auto& host_topo = dal::detail::get_impl(graph).get_topology();
+    auto device_topo =
+        dal::preview::detail::topology_to_device<std::int32_t>(q, host_topo);
+
+    std::cout << "Graph transferred to device: "
+              << device_topo.get_vertex_count() << " vertices, "
+              << device_topo.get_edge_count() << " edges" << std::endl;
 
     // Set algorithm parameters: compute both local and global triangle counts
     const auto tc_desc = descriptor<float, method::ordered_count, task::local_and_global>();
 
-    // Run triangle counting on the SYCL device (CPU or GPU)
+    // Run triangle counting on the SYCL device (CPU or GPU).
+    // The kernel internally transfers the host graph to device for computation.
     const auto result = dal::preview::vertex_ranking(q, tc_desc, graph);
 
     // Extract and print the results
@@ -55,6 +67,12 @@ void run(sycl::queue& q) {
     for (auto i = 0; i < local_triangles_table.get_row_count(); i++) {
         std::cout << i << ":\t" << local_triangles_data[i] << std::endl;
     }
+
+    // Demonstrate round-trip: transfer back to host and verify
+    auto roundtrip_topo = dal::preview::detail::topology_to_host(device_topo);
+    std::cout << "\nRound-trip verification: "
+              << roundtrip_topo.get_vertex_count() << " vertices, "
+              << roundtrip_topo.get_edge_count() << " edges" << std::endl;
 }
 
 int main(int argc, char const* argv[]) {

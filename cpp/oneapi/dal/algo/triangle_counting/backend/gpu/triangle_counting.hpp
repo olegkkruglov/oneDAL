@@ -2,7 +2,7 @@
 
 #include "oneapi/dal/algo/triangle_counting/common.hpp"
 #include "oneapi/dal/algo/triangle_counting/vertex_ranking_types.hpp"
-#include "oneapi/dal/backend/common.hpp"
+#include "oneapi/dal/backend/dispatcher.hpp"
 
 namespace oneapi::dal::preview::triangle_counting::backend {
 

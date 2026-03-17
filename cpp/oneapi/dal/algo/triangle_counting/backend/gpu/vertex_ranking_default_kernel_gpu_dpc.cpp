@@ -19,6 +19,7 @@
 #include "oneapi/dal/algo/triangle_counting/backend/gpu/triangle_counting.hpp"
 #include "oneapi/dal/algo/triangle_counting/backend/gpu/vertex_ranking_kernel.hpp"
 #include "oneapi/dal/backend/dispatcher.hpp"
+#include "oneapi/dal/graph/detail/csr_topology.hpp"
 #include "oneapi/dal/table/detail/table_builder.hpp"
 
 namespace oneapi::dal::preview::triangle_counting::backend {
@@ -74,19 +75,25 @@ std::int64_t* count_triangles_gpu(sycl::queue& queue,
                     const std::int64_t nu = d_cols[ui];
                     const std::int64_t nv = d_cols[vi];
                     if (nu == nv) {
-                        // Found a common neighbor: triangle (u, v, nu)
-                        count++;
-                        // Atomically increment counts for v and the common neighbor
-                        sycl::atomic_ref<std::int64_t,
-                                         sycl::memory_order::relaxed,
-                                         sycl::memory_scope::device,
-                                         sycl::access::address_space::global_space>(d_triangles[v])
-                            .fetch_add(1);
-                        sycl::atomic_ref<std::int64_t,
-                                         sycl::memory_order::relaxed,
-                                         sycl::memory_scope::device,
-                                         sycl::access::address_space::global_space>(d_triangles[nu])
-                            .fetch_add(1);
+                        // Only count if common neighbor w > v to avoid
+                        // triple-counting the same triangle
+                        if (nu > v) {
+                            // Found a triangle (u, v, nu) with u < v < nu
+                            count++;
+                            // Atomically increment counts for v and the common neighbor
+                            sycl::atomic_ref<std::int64_t,
+                                             sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>(
+                                d_triangles[v])
+                                .fetch_add(1);
+                            sycl::atomic_ref<std::int64_t,
+                                             sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>(
+                                d_triangles[nu])
+                                .fetch_add(1);
+                        }
                         ++ui;
                         ++vi;
                     }
@@ -165,10 +172,10 @@ vertex_ranking_result<Task> run_vertex_ranking_gpu(const dal::backend::context_g
 
     if constexpr (std::is_same_v<Task, task::local> ||
                   std::is_same_v<Task, task::local_and_global>) {
-        auto arr = array<std::int64_t>::wrap(local_triangles, vertex_count,
-                                             [queue](auto* ptr) mutable {
-                                                 sycl::free(ptr, queue);
-                                             });
+        auto arr = array<std::int64_t>(queue, local_triangles, vertex_count,
+                                       [queue](std::int64_t* ptr) mutable {
+                                           sycl::free(ptr, queue);
+                                       });
         result.set_ranks(dal::detail::homogen_table_builder{}
                              .reset(arr, vertex_count, 1)
                              .build());
@@ -208,38 +215,36 @@ vertex_ranking_result<Task> vertex_ranking_kernel_gpu<Float, Task, Topology>::op
     const std::int64_t rows_count = vertex_count + 1;
     const std::int64_t cols_count = edge_count * 2;
 
-    auto* device_rows = sycl::malloc_device<std::int64_t>(rows_count, queue);
-    auto* device_cols = sycl::malloc_device<std::int32_t>(cols_count, queue);
+    // Copy int64_t row offsets to device, then convert to int32_t
+    auto* device_rows_i64 = sycl::malloc_device<std::int64_t>(rows_count, queue);
+    queue.memcpy(device_rows_i64, host_rows, rows_count * sizeof(std::int64_t)).wait_and_throw();
 
-    queue.memcpy(device_rows, host_rows, rows_count * sizeof(std::int64_t)).wait_and_throw();
-    queue.memcpy(device_cols, host_cols, cols_count * sizeof(std::int32_t)).wait_and_throw();
-
-    // Create a CSR view for GPU kernel
-    csr_topology_gpu_view<std::int32_t> gpu_view;
-    gpu_view.rows = reinterpret_cast<const std::int32_t*>(device_rows);
-    gpu_view.cols = device_cols;
-    gpu_view.vertex_count = vertex_count;
-    gpu_view.edge_count = edge_count;
-
-    // The topology uses std::int64_t for rows, but the GPU view uses Index.
-    // Convert rows to int32_t for the GPU kernel.
     auto* device_rows_i32 = sycl::malloc_device<std::int32_t>(rows_count, queue);
     queue.submit([&](sycl::handler& cgh) {
-        const auto* src = device_rows;
+        const auto* src = device_rows_i64;
         auto* dst = device_rows_i32;
         const auto n = rows_count;
         cgh.parallel_for(sycl::range<1>(n), [=](sycl::id<1> idx) {
             dst[idx[0]] = static_cast<std::int32_t>(src[idx[0]]);
         });
     }).wait_and_throw();
+    sycl::free(device_rows_i64, queue);
 
+    // Copy int32_t column indices to device
+    auto* device_cols = sycl::malloc_device<std::int32_t>(cols_count, queue);
+    queue.memcpy(device_cols, host_cols, cols_count * sizeof(std::int32_t)).wait_and_throw();
+
+    // Create a CSR view for GPU kernel
+    csr_topology_gpu_view<std::int32_t> gpu_view;
     gpu_view.rows = device_rows_i32;
+    gpu_view.cols = device_cols;
+    gpu_view.vertex_count = vertex_count;
+    gpu_view.edge_count = edge_count;
 
     auto result = run_vertex_ranking_gpu<Float, Task, std::int32_t>(ctx, desc, gpu_view);
 
-    sycl::free(device_rows, queue);
-    sycl::free(device_cols, queue);
     sycl::free(device_rows_i32, queue);
+    sycl::free(device_cols, queue);
 
     return result;
 }

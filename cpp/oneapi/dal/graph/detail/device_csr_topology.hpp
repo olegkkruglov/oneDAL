@@ -104,12 +104,14 @@ device_csr_topology<IndexType> topology_to_device(sycl::queue& queue,
     const std::int64_t cols_count = host_topo._cols.get_count();
 
     // Transfer column indices (IndexType -> IndexType) to device
-    auto device_cols =
-        dal::array<IndexType>::empty(queue, cols_count, sycl::usm::alloc::device);
-    queue.memcpy(device_cols.get_mutable_data(),
-                 host_topo._cols.get_data(),
-                 cols_count * sizeof(IndexType))
-        .wait_and_throw();
+    dal::array<IndexType> device_cols;
+    if (cols_count > 0) {
+        device_cols = dal::array<IndexType>::empty(queue, cols_count, sycl::usm::alloc::device);
+        queue.memcpy(device_cols.get_mutable_data(),
+                     host_topo._cols.get_data(),
+                     cols_count * sizeof(IndexType))
+            .wait_and_throw();
+    }
 
     // Transfer row offsets (int64 -> int64) to device
     auto device_rows =

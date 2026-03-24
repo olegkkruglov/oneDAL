@@ -34,7 +34,7 @@ namespace dal = oneapi::dal;
 using namespace dal::preview::triangle_counting;
 
 void run(sycl::queue& q) {
-    const auto filename = get_data_path("graph.csv");
+    const auto filename = get_data_path("data/graph.csv");
 
     // Read the graph from CSV into host memory
     using graph_t = dal::preview::undirected_adjacency_vector_graph<>;

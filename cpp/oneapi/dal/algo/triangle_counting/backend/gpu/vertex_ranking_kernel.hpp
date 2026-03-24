@@ -10,7 +10,7 @@ namespace oneapi::dal::preview::triangle_counting::backend {
 
 template <typename Index = std::int32_t>
 struct csr_topology_gpu_view {
-    const Index* rows = nullptr;
+    const std::int64_t* rows = nullptr;
     const Index* cols = nullptr;
     std::int64_t vertex_count = 0;
     std::int64_t edge_count = 0;

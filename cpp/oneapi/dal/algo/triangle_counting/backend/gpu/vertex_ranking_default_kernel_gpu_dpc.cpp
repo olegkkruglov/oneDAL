@@ -37,7 +37,7 @@ namespace detail_gpu {
 /// @return     A USM-allocated array of per-vertex triangle counts
 template <typename Index>
 std::int64_t* count_triangles_gpu(sycl::queue& queue,
-                                  const Index* rows,
+                                  const std::int64_t* rows,
                                   const Index* cols,
                                   std::int64_t vertex_count,
                                   std::int64_t edge_count) {
@@ -47,7 +47,7 @@ std::int64_t* count_triangles_gpu(sycl::queue& queue,
 
     // Parallel kernel: each work-item processes one vertex
     queue.submit([&](sycl::handler& cgh) {
-        const Index* d_rows = rows;
+        const std::int64_t* d_rows = rows;
         const Index* d_cols = cols;
         std::int64_t* d_triangles = local_triangles;
         const std::int64_t vc = vertex_count;
@@ -208,7 +208,7 @@ vertex_ranking_result<Task> vertex_ranking_kernel_gpu<Float, Task, Topology>::op
     }
 
     // Transfer the host topology to device memory using the graph transfer utility.
-    // This copies row offsets (int64 -> int32 conversion) and column indices to device.
+    // This copies row offsets and column indices to device USM memory.
     auto device_topo =
         dal::preview::detail::topology_to_device<std::int32_t>(queue, topology);
 

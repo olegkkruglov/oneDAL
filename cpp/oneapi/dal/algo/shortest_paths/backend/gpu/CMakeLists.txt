@@ -1,0 +1,5 @@
+set(ONEDAL_SHORTEST_PATHS_BACKEND_GPU_HEADERS
+    ${CMAKE_CURRENT_LIST_DIR}/shortest_paths.hpp
+    ${CMAKE_CURRENT_LIST_DIR}/traverse_kernel.hpp
+    PARENT_SCOPE
+)

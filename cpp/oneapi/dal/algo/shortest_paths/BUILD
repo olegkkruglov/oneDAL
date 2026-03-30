@@ -18,7 +18,22 @@ dal_test_suite(
     framework = "catch2",
     srcs = glob([
         "test/*.cpp",
+    ],
+    exclude = [
+        "test/*gpu*",
     ]),
+    dal_deps = [
+        ":shortest_paths",
+    ],
+)
+
+dal_test_suite(
+    name = "gpu_tests",
+    framework = "catch2",
+    compile_as = [ "dpc++" ],
+    srcs = [
+        "test/shortest_paths_gpu_test.cpp",
+    ],
     dal_deps = [
         ":shortest_paths",
     ],

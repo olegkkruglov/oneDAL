@@ -38,7 +38,7 @@ namespace detail_gpu {
 /// @return     A USM-allocated array of per-vertex component labels
 template <typename Index>
 std::int32_t* compute_components_gpu(sycl::queue& queue,
-                                     const Index* rows,
+                                     const std::int64_t* rows,
                                      const Index* cols,
                                      std::int64_t vertex_count,
                                      std::int64_t edge_count,
@@ -66,7 +66,7 @@ std::int32_t* compute_components_gpu(sycl::queue& queue,
         // toward the lower component root
         queue
             .submit([&](sycl::handler& cgh) {
-                const Index* d_rows = rows;
+                const std::int64_t* d_rows = rows;
                 const Index* d_cols = cols;
                 std::int32_t* d_components = components;
                 std::int32_t* d_changed = changed;
@@ -203,7 +203,7 @@ vertex_partitioning_result<Task> vertex_partitioning_kernel_gpu<Float, Task, Top
     }
 
     // Transfer the host topology to device memory using the graph transfer utility.
-    // This copies row offsets (int64 -> int32 conversion) and column indices to device.
+    // This copies row offsets and column indices to device USM memory.
     auto device_topo =
         dal::preview::detail::topology_to_device<std::int32_t>(queue, topology);
 

@@ -12,27 +12,16 @@
 .. See the License for the specific language governing permissions and
 .. limitations under the License.
 
-=====
-Graph
-=====
+.. tabs::
 
-This chapter describes graph algorithms implemented in |short_name|:
+   .. group-tab:: oneAPI C++
 
-.. toctree::
-   :titlesonly:
+      Batch Processing:
 
-   subgraph-isomorphism.rst
-   connected-components.rst
-   triangle-counting.rst
+      - :ref:`cpp_triangle_counting_batch.cpp`
 
-.. rubric:: Examples: Subgraph Isomorphism
+   .. group-tab:: oneAPI DPC++
 
-.. include:: ../../../includes/graph/subgraph-isomorphism-examples.rst
+      Batch Processing:
 
-.. rubric:: Examples: Triangle Counting
-
-.. include:: ../../../includes/graph/triangle-counting-examples.rst
-
-.. rubric:: Examples: Connected Components
-
-.. include:: ../../../includes/graph/connected-components-examples.rst
+      - :ref:`dpc_triangle_counting_batch.cpp`

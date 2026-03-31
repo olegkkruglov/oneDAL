@@ -55,3 +55,5 @@ run on other hardware platforms if a SYCL runtime is available.
      -
    * - :ref:`alg_basic_statistics`
      -
+   * - :ref:`alg_triangle_counting`
+     -

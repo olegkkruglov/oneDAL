@@ -23,3 +23,4 @@ This chapter describes programming interfaces of the graph algorithms implemente
 
    subgraph-isomorphism.rst
    connected-components.rst
+   triangle-counting.rst

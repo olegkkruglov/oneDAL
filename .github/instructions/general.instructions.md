@@ -101,3 +101,4 @@ applyTo: "**"
 - **[coding-guidelines.md](/.github/instructions/cpp-coding-guidelines.md)** - Comprehensive coding standards
 - **[build-systems.md](/.github/instructions/build-systems.md)** - Build system guidance
 - **[examples.md](/.github/instructions/examples.md)** - Example patterns
+- **[graph-algorithms.md](/.github/instructions/graph-algorithms.instructions.md)** - Graph algorithm patterns (preview namespace, CSR topology, GPU dispatch)

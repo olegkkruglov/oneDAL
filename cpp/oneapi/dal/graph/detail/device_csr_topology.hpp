@@ -106,7 +106,8 @@ device_csr_topology<IndexType> topology_to_device(sycl::queue& queue,
     // Transfer column indices (IndexType -> IndexType) to device
     dal::array<IndexType> device_cols;
     if (cols_count > 0) {
-        device_cols = dal::array<IndexType>::empty(queue, cols_count, sycl::usm::alloc::device);
+        device_cols =
+            dal::array<IndexType>::empty(queue, cols_count, sycl::usm::alloc::device);
         queue.memcpy(device_cols.get_mutable_data(),
                      host_topo._cols.get_data(),
                      cols_count * sizeof(IndexType))

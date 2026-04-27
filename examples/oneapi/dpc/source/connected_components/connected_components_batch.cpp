@@ -15,6 +15,7 @@
 *******************************************************************************/
 
 #include <sycl/sycl.hpp>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -42,9 +43,15 @@ void run(sycl::queue& q) {
     const auto cc_desc = dal::preview::connected_components::descriptor<>();
 
     // Compute connected components on the SYCL device (CPU or GPU).
+    const auto t1 = std::chrono::steady_clock::now();
     const auto result = dal::preview::vertex_partitioning(q, cc_desc, graph);
+    const auto t2 = std::chrono::steady_clock::now();
+    const double runtime_ms =
+        std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0;
 
     // Extract and print the results
+    std::cout << "Runtime: " << std::fixed << std::setprecision(3) << runtime_ms << " ms"
+              << std::endl;
     std::cout << "Number of connected components: " << result.get_component_count() << std::endl;
     std::cout << "Components' labels:" << std::endl;
     std::cout << result.get_labels() << std::endl;

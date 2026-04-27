@@ -20,13 +20,20 @@
 #include "oneapi/dal/algo/connected_components/backend/gpu/vertex_partitioning_kernel.hpp"
 #include "oneapi/dal/backend/dispatcher.hpp"
 #include "oneapi/dal/table/detail/table_builder.hpp"
+#include "oneapi/dal/backend/primitives/frontier.hpp"
 
 namespace oneapi::dal::preview::connected_components::backend {
 
+namespace fp = oneapi::dal::preview::backend::primitives;
+
 namespace detail_gpu {
 
-/// Computes connected components on the GPU using a Shiloach-Vishkin-style
-/// hook-and-compress approach.
+/// Computes connected components on the GPU using a label-propagation approach
+/// with the oneDAL frontier advance primitive (inspired by SYgraph, University
+/// of Salerno). Each vertex propagates its label (minimum) to neighbors via
+/// atomic fetch_min. A two-layer bitmap frontier tracks which vertices changed,
+/// and the advance kernel provides workload-balanced edge processing across
+/// workgroup, subgroup, and work-item granularities.
 ///
 /// @tparam Index  The index type used for vertex/edge indexing
 /// @param[in]  queue         SYCL queue for device execution
@@ -43,113 +50,104 @@ std::int32_t* compute_components_gpu(sycl::queue& queue,
                                      std::int64_t vertex_count,
                                      std::int64_t edge_count,
                                      std::int64_t& component_count) {
-    auto* components = sycl::malloc_shared<std::int32_t>(vertex_count, queue);
-    auto* changed = sycl::malloc_shared<std::int32_t>(1, queue);
+    auto* labels = sycl::malloc_shared<std::int32_t>(vertex_count, queue);
 
-    // Initialize each vertex as its own component
+    // Initialize: labels[v] = v
     queue
         .submit([&](sycl::handler& cgh) {
-            std::int32_t* d_components = components;
+            std::int32_t* d_labels = labels;
             const std::int64_t vc = vertex_count;
             cgh.parallel_for(sycl::range<1>(vc), [=](sycl::id<1> idx) {
-                d_components[idx[0]] = static_cast<std::int32_t>(idx[0]);
+                d_labels[idx[0]] = static_cast<std::int32_t>(idx[0]);
             });
         })
         .wait_and_throw();
 
-    // Iteratively hook and compress until convergence
-    bool has_changed = true;
-    while (has_changed) {
-        changed[0] = 0;
-
-        // Hook: for each edge (u, v), point the higher component root
-        // toward the lower component root
-        queue
-            .submit([&](sycl::handler& cgh) {
-                const std::int64_t* d_rows = rows;
-                const Index* d_cols = cols;
-                std::int32_t* d_components = components;
-                std::int32_t* d_changed = changed;
-                const std::int64_t vc = vertex_count;
-
-                cgh.parallel_for(sycl::range<1>(vc), [=](sycl::id<1> idx) {
-                    const std::int64_t u = idx[0];
-                    const std::int64_t u_start = d_rows[u];
-                    const std::int64_t u_end = d_rows[u + 1];
-
-                    std::int32_t comp_u = d_components[u];
-
-                    for (std::int64_t i = u_start; i < u_end; ++i) {
-                        const std::int64_t v = d_cols[i];
-                        std::int32_t comp_v = d_components[v];
-
-                        // Link higher-labeled component root to lower one
-                        if (comp_u < comp_v) {
-                            sycl::atomic_ref<std::int32_t,
-                                             sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>(
-                                d_components[comp_v])
-                                .fetch_min(comp_u);
-                            d_changed[0] = 1;
-                        }
-                        else if (comp_v < comp_u) {
-                            sycl::atomic_ref<std::int32_t,
-                                             sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>(
-                                d_components[comp_u])
-                                .fetch_min(comp_v);
-                            d_changed[0] = 1;
-                        }
-                    }
-                });
-            })
-            .wait_and_throw();
-
-        // Compress: path compression so each vertex points directly to root
-        queue
-            .submit([&](sycl::handler& cgh) {
-                std::int32_t* d_components = components;
-                const std::int64_t vc = vertex_count;
-
-                cgh.parallel_for(sycl::range<1>(vc), [=](sycl::id<1> idx) {
-                    std::int32_t v = static_cast<std::int32_t>(idx[0]);
-                    while (d_components[v] != d_components[d_components[v]]) {
-                        d_components[v] = d_components[d_components[v]];
-                    }
-                });
-            })
-            .wait_and_throw();
-
-        has_changed = (changed[0] != 0);
+    // Fast path: if no edges, every vertex is its own component
+    if (edge_count == 0) {
+        component_count = vertex_count;
+        return labels;
     }
 
-    // Count components and reorder labels
+    // Create graph wrapper referencing the existing device CSR topology for advance()
+    // OffsetT = int64_t (row offsets), VertexT = Index (column indices), unweighted
+    fp::csr_graph_external<Index, std::uint32_t, std::uint32_t, std::int64_t> graph(
+        queue,
+        static_cast<std::uint64_t>(vertex_count),
+        rows,
+        cols);
+
+    // Create two-layer bitmap frontiers for double-buffering (device allocation)
+    fp::frontier<std::uint32_t> in_frontier(queue, vertex_count, sycl::usm::alloc::device);
+    fp::frontier<std::uint32_t> out_frontier(queue, vertex_count, sycl::usm::alloc::device);
+
+    // Initialize: all vertices active in the frontier
+    {
+        auto fv = in_frontier.get_device_view();
+        const std::int64_t vc = vertex_count;
+        queue
+            .submit([&](sycl::handler& cgh) {
+                cgh.parallel_for(sycl::range<1>(vc), [=](sycl::id<1> idx) {
+                    fv.insert(static_cast<std::uint32_t>(idx[0]));
+                });
+            })
+            .wait_and_throw();
+    }
+
+    // Label propagation with workload-balanced frontier advance
+    std::int32_t* d_labels = labels;
+    while (!in_frontier.empty()) {
+        auto e = fp::advance(
+            graph,
+            in_frontier,
+            out_frontier,
+            [=](auto src, auto dst, auto edge, auto weight) -> bool {
+                const std::int32_t label_src = d_labels[src];
+                const std::int32_t label_dst = d_labels[dst];
+
+                // Propagate minimum label to neighbor
+                if (label_src < label_dst) {
+                    std::int32_t old_val =
+                        sycl::atomic_ref<std::int32_t,
+                                         sycl::memory_order::relaxed,
+                                         sycl::memory_scope::device,
+                                         sycl::access::address_space::global_space>(
+                            d_labels[dst])
+                            .fetch_min(label_src);
+                    // If we actually decreased the label, add dst to output frontier
+                    return label_src < old_val;
+                }
+                return false;
+            });
+        e.wait_and_throw();
+
+        fp::swap_frontiers(in_frontier, out_frontier);
+        out_frontier.clear();
+    }
+
+    // Count components and reorder labels to contiguous 0..k-1
     auto* ordered_labels = sycl::malloc_shared<std::int32_t>(vertex_count, queue);
     auto* comp_count_ptr = sycl::malloc_shared<std::int32_t>(1, queue);
     comp_count_ptr[0] = 0;
 
-    // Initialize ordered_labels to -1
     queue.memset(ordered_labels, 0xFF, vertex_count * sizeof(std::int32_t)).wait_and_throw();
 
     // Sequential pass to assign ordered component IDs
     for (std::int64_t u = 0; u < vertex_count; ++u) {
-        std::int32_t root = components[u];
+        std::int32_t root = labels[u];
         if (ordered_labels[root] < 0) {
             ordered_labels[root] = comp_count_ptr[0];
             comp_count_ptr[0]++;
         }
-        components[u] = ordered_labels[root];
+        labels[u] = ordered_labels[root];
     }
 
     component_count = comp_count_ptr[0];
 
-    sycl::free(changed, queue);
     sycl::free(ordered_labels, queue);
     sycl::free(comp_count_ptr, queue);
 
-    return components;
+    return labels;
 }
 
 } // namespace detail_gpu

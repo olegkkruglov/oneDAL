@@ -25,17 +25,98 @@
 
 namespace oneapi::dal::preview::detail {
 
-/// A device-resident CSR topology that holds row offsets and column indices
-/// as dal::array objects in device USM memory.
+/// A device-resident CSR topology that holds row offsets, column indices,
+/// and optionally edge weights as dal::array objects in device USM memory.
 ///
 /// Row offsets are stored as int64 (matching the host topology) and column
-/// indices as IndexType (typically int32).
+/// indices as IndexType (typically int32). Edge weights are optional —
+/// set WeightType to void (default) for unweighted graphs.
 ///
 /// Construct via \ref topology_to_device() or \ref topology_to_host().
-template <typename IndexType = std::int32_t>
+template <typename IndexType = std::int32_t, typename WeightType = void>
 class device_csr_topology {
 public:
     using index_type = IndexType;
+    using weight_type = WeightType;
+
+    device_csr_topology() = default;
+
+    /// Construct an unweighted device topology.
+    device_csr_topology(dal::array<std::int64_t> device_rows,
+                        dal::array<IndexType> device_cols,
+                        std::int64_t vertex_count,
+                        std::int64_t edge_count)
+            : rows_(std::move(device_rows)),
+              cols_(std::move(device_cols)),
+              vertex_count_(vertex_count),
+              edge_count_(edge_count) {}
+
+    /// Construct a weighted device topology.
+    device_csr_topology(dal::array<std::int64_t> device_rows,
+                        dal::array<IndexType> device_cols,
+                        dal::array<WeightType> device_weights,
+                        std::int64_t vertex_count,
+                        std::int64_t edge_count)
+            : rows_(std::move(device_rows)),
+              cols_(std::move(device_cols)),
+              weights_(std::move(device_weights)),
+              vertex_count_(vertex_count),
+              edge_count_(edge_count) {}
+
+    /// Pointer to device-resident row offsets (vertex_count + 1 entries).
+    const std::int64_t* get_rows() const {
+        return rows_.get_data();
+    }
+
+    /// Pointer to device-resident column indices (2 * edge_count entries).
+    const IndexType* get_cols() const {
+        return cols_.get_data();
+    }
+
+    /// Pointer to device-resident edge weights (2 * edge_count entries),
+    /// or nullptr if the graph is unweighted.
+    const WeightType* get_weights() const {
+        return weights_.get_count() > 0 ? weights_.get_data() : nullptr;
+    }
+
+    std::int64_t get_vertex_count() const {
+        return vertex_count_;
+    }
+
+    std::int64_t get_edge_count() const {
+        return edge_count_;
+    }
+
+    /// Returns the underlying device array for row offsets.
+    const dal::array<std::int64_t>& get_rows_array() const {
+        return rows_;
+    }
+
+    /// Returns the underlying device array for column indices.
+    const dal::array<IndexType>& get_cols_array() const {
+        return cols_;
+    }
+
+    /// Returns the underlying device array for edge weights.
+    const dal::array<WeightType>& get_weights_array() const {
+        return weights_;
+    }
+
+private:
+    dal::array<std::int64_t> rows_;
+    dal::array<IndexType> cols_;
+    dal::array<WeightType> weights_;
+    std::int64_t vertex_count_ = 0;
+    std::int64_t edge_count_ = 0;
+};
+
+/// Specialization for unweighted graphs (WeightType = void).
+/// This preserves full backward compatibility with existing code.
+template <typename IndexType>
+class device_csr_topology<IndexType, void> {
+public:
+    using index_type = IndexType;
+    using weight_type = void;
 
     device_csr_topology() = default;
 

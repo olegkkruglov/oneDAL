@@ -15,6 +15,7 @@
 *******************************************************************************/
 
 #include <sycl/sycl.hpp>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -55,7 +56,11 @@ void run(sycl::queue& q) {
 
     // Run triangle counting on the SYCL device (CPU or GPU).
     // The kernel internally transfers the host graph to device for computation.
+    const auto t1 = std::chrono::steady_clock::now();
     const auto result = dal::preview::vertex_ranking(q, tc_desc, graph);
+    const auto t2 = std::chrono::steady_clock::now();
+    const auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    std::cout << "Triangle counting compute time: " << dt << " ms" << std::endl;
 
     // Extract and print the results
     std::cout << "Global triangles: " << result.get_global_rank() << std::endl;

@@ -14,27 +14,35 @@
 * limitations under the License.
 *******************************************************************************/
 
+#include <sycl/sycl.hpp>
 #include <chrono>
+#include <iostream>
 #include <memory>
 
-#include "example_util/utils.hpp"
+#ifndef ONEDAL_DATA_PARALLEL
+#define ONEDAL_DATA_PARALLEL
+#endif
+
 #include "oneapi/dal/algo/shortest_paths.hpp"
 #include "oneapi/dal/graph/directed_adjacency_vector_graph.hpp"
 #include "oneapi/dal/io/csv.hpp"
 
+#include "example_util/utils.hpp"
+
 namespace dal = oneapi::dal;
 
-int main(int argc, char** argv) {
+void run(sycl::queue& q) {
     const auto filename = get_data_path("data/weighted_edge_list.csv");
 
     using vertex_type = int32_t;
     using weight_type = double;
     using graph_t = dal::preview::directed_adjacency_vector_graph<vertex_type, weight_type>;
 
+    // Read the weighted directed graph from CSV into host memory
     const auto graph = dal::read<graph_t>(dal::csv::data_source{ filename },
                                           dal::preview::read_mode::weighted_edge_list);
 
-    // set algorithm parameters
+    // Set algorithm parameters
     const auto shortest_paths_desc = dal::preview::shortest_paths::descriptor<
         float,
         dal::preview::shortest_paths::method::delta_stepping,
@@ -43,18 +51,28 @@ int main(int argc, char** argv) {
         0.85,
         dal::preview::shortest_paths::optional_results::distances |
             dal::preview::shortest_paths::optional_results::predecessors);
-    // compute shortest paths
+
+    // Compute shortest paths on the SYCL device (CPU or GPU)
     const auto t1 = std::chrono::steady_clock::now();
-    const auto result_shortest_paths = dal::preview::traverse(shortest_paths_desc, graph);
+    const auto result = dal::preview::traverse(q, shortest_paths_desc, graph);
     const auto t2 = std::chrono::steady_clock::now();
     const auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
     std::cout << "Shortest paths compute time: " << dt << " ms" << std::endl;
 
-    // extract the result
-    std::cout << "Distances: " << std::endl;
-    std::cout << result_shortest_paths.get_distances() << std::endl;
-    std::cout << "Predecessors: " << std::endl;
-    std::cout << result_shortest_paths.get_predecessors() << std::endl;
+    // Extract and print the results
+    std::cout << "Distances:" << std::endl;
+    std::cout << result.get_distances() << std::endl;
+    std::cout << "Predecessors:" << std::endl;
+    std::cout << result.get_predecessors() << std::endl;
+}
 
+int main(int argc, char const* argv[]) {
+    for (auto d : list_devices()) {
+        std::cout << "Running on " << d.get_platform().get_info<sycl::info::platform::name>()
+                  << ", " << d.get_info<sycl::info::device::name>() << "\n"
+                  << std::endl;
+        auto q = sycl::queue{ d };
+        run(q);
+    }
     return 0;
 }

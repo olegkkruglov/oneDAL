@@ -60,18 +60,18 @@ void run(sycl::queue& q) {
     const auto result = dal::preview::vertex_ranking(q, tc_desc, graph);
     const auto t2 = std::chrono::steady_clock::now();
     const auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-    std::cout << "Triangle counting compute time: " << dt << " ms" << std::endl;
+    std::cout << "Runtime: " << dt << " ms" << std::endl;
 
     // Extract and print the results
     std::cout << "Global triangles: " << result.get_global_rank() << std::endl;
-    std::cout << "Local triangles:" << std::endl;
+    // std::cout << "Local triangles:" << std::endl;
 
-    auto local_triangles_table = result.get_ranks();
-    const auto& local_triangles = static_cast<const dal::homogen_table&>(local_triangles_table);
-    const auto local_triangles_data = local_triangles.get_data<std::int64_t>();
-    for (auto i = 0; i < local_triangles_table.get_row_count(); i++) {
-        std::cout << i << ":\t" << local_triangles_data[i] << std::endl;
-    }
+    // auto local_triangles_table = result.get_ranks();
+    // const auto& local_triangles = static_cast<const dal::homogen_table&>(local_triangles_table);
+    // const auto local_triangles_data = local_triangles.get_data<std::int64_t>();
+    // for (auto i = 0; i < local_triangles_table.get_row_count(); i++) {
+    //     std::cout << i << ":\t" << local_triangles_data[i] << std::endl;
+    // }
 
     // Demonstrate round-trip: transfer back to host and verify
     auto roundtrip_topo = dal::preview::detail::topology_to_host(device_topo);

@@ -53,8 +53,8 @@ void run(sycl::queue& q) {
     std::cout << "Runtime: " << std::fixed << std::setprecision(3) << runtime_ms << " ms"
               << std::endl;
     std::cout << "Number of connected components: " << result.get_component_count() << std::endl;
-    std::cout << "Components' labels:" << std::endl;
-    std::cout << result.get_labels() << std::endl;
+    // std::cout << "Components' labels:" << std::endl;
+    // std::cout << result.get_labels() << std::endl;
 }
 
 int main(int argc, char const* argv[]) {

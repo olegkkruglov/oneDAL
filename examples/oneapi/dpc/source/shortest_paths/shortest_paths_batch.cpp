@@ -57,13 +57,13 @@ void run(sycl::queue& q) {
     const auto result = dal::preview::traverse(q, shortest_paths_desc, graph);
     const auto t2 = std::chrono::steady_clock::now();
     const auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-    std::cout << "Shortest paths compute time: " << dt << " ms" << std::endl;
+    std::cout << "Runtime: " << dt << " ms" << std::endl;
 
     // Extract and print the results
-    std::cout << "Distances:" << std::endl;
-    std::cout << result.get_distances() << std::endl;
-    std::cout << "Predecessors:" << std::endl;
-    std::cout << result.get_predecessors() << std::endl;
+    // std::cout << "Distances:" << std::endl;
+    // std::cout << result.get_distances() << std::endl;
+    // std::cout << "Predecessors:" << std::endl;
+    // std::cout << result.get_predecessors() << std::endl;
 }
 
 int main(int argc, char const* argv[]) {

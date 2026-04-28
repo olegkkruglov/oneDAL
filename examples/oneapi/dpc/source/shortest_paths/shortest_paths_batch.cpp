@@ -15,7 +15,7 @@
 *******************************************************************************/
 
 #include <sycl/sycl.hpp>
-#include <iomanip>
+#include <chrono>
 #include <iostream>
 #include <memory>
 
@@ -34,17 +34,16 @@ namespace dal = oneapi::dal;
 void run(sycl::queue& q) {
     const auto filename = get_data_path("data/weighted_edge_list.csv");
 
-    // Read the weighted directed graph from CSV
-    using vertex_type = std::int32_t;
+    using vertex_type = int32_t;
     using weight_type = double;
     using graph_t = dal::preview::directed_adjacency_vector_graph<vertex_type, weight_type>;
 
+    // Read the weighted directed graph from CSV into host memory
     const auto graph = dal::read<graph_t>(dal::csv::data_source{ filename },
                                           dal::preview::read_mode::weighted_edge_list);
 
-    // Set algorithm parameters: source vertex 0, delta 0.85,
-    // compute both distances and predecessors
-    const auto sp_desc = dal::preview::shortest_paths::descriptor<
+    // Set algorithm parameters
+    const auto shortest_paths_desc = dal::preview::shortest_paths::descriptor<
         float,
         dal::preview::shortest_paths::method::delta_stepping,
         dal::preview::shortest_paths::task::one_to_all>(
@@ -54,13 +53,17 @@ void run(sycl::queue& q) {
             dal::preview::shortest_paths::optional_results::predecessors);
 
     // Compute shortest paths on the SYCL device (CPU or GPU)
-    const auto result = dal::preview::traverse(q, sp_desc, graph);
+    const auto t1 = std::chrono::steady_clock::now();
+    const auto result = dal::preview::traverse(q, shortest_paths_desc, graph);
+    const auto t2 = std::chrono::steady_clock::now();
+    const auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    std::cout << "Runtime: " << dt << " ms" << std::endl;
 
     // Extract and print the results
-    std::cout << "Distances:" << std::endl;
-    std::cout << result.get_distances() << std::endl;
-    std::cout << "Predecessors:" << std::endl;
-    std::cout << result.get_predecessors() << std::endl;
+    // std::cout << "Distances:" << std::endl;
+    // std::cout << result.get_distances() << std::endl;
+    // std::cout << "Predecessors:" << std::endl;
+    // std::cout << result.get_predecessors() << std::endl;
 }
 
 int main(int argc, char const* argv[]) {

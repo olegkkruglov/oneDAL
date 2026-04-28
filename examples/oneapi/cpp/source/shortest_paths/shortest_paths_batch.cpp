@@ -14,6 +14,7 @@
 * limitations under the License.
 *******************************************************************************/
 
+#include <chrono>
 #include <memory>
 
 #include "example_util/utils.hpp"
@@ -43,7 +44,11 @@ int main(int argc, char** argv) {
         dal::preview::shortest_paths::optional_results::distances |
             dal::preview::shortest_paths::optional_results::predecessors);
     // compute shortest paths
+    const auto t1 = std::chrono::steady_clock::now();
     const auto result_shortest_paths = dal::preview::traverse(shortest_paths_desc, graph);
+    const auto t2 = std::chrono::steady_clock::now();
+    const auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    std::cout << "Runtime: " << dt << " ms" << std::endl;
 
     // extract the result
     std::cout << "Distances: " << std::endl;

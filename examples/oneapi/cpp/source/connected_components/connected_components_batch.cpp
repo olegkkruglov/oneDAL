@@ -14,6 +14,8 @@
 * limitations under the License.
 *******************************************************************************/
 
+#include <chrono>
+
 #include "example_util/utils.hpp"
 #include "oneapi/dal/algo/connected_components.hpp"
 #include "oneapi/dal/graph/undirected_adjacency_vector_graph.hpp"
@@ -32,7 +34,11 @@ int main(int argc, char** argv) {
     const auto cc_desc = dal::preview::connected_components::descriptor<>();
 
     // compute connected components
+    const auto t1 = std::chrono::steady_clock::now();
     const auto result_connected_components = dal::preview::vertex_partitioning(cc_desc, graph);
+    const auto t2 = std::chrono::steady_clock::now();
+    const auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+    std::cout << "Runtime: " << dt << " ms" << std::endl;
 
     // extract the result
     std::cout << "Components' labels:\n" << result_connected_components.get_labels() << std::endl;
